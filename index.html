@@ -237,6 +237,10 @@ input[type=range].slider-track::-moz-range-thumb{width:18px;height:18px;border-r
 .acc-type-pill{padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;background:transparent;color:var(--text-muted);border:1px solid var(--border);transition:all .15s;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
 .acc-type-pill:hover{border-color:var(--border-hover);color:var(--text)}
 .acc-type-pill.active{border-color:var(--accent);background:var(--accent-glow);color:var(--accent)}
+.acc-owner-pills{display:flex;gap:2px;margin-left:4px;flex-shrink:0}
+.acc-owner-pill{padding:2px 9px;border-radius:99px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:var(--text-muted);border:1px solid var(--border);transition:all .15s;white-space:nowrap}
+.acc-owner-pill:hover{border-color:var(--border-hover);color:var(--text)}
+.acc-owner-tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;border:1px solid var(--accent);background:var(--accent-glow);color:var(--accent);margin-left:4px;flex-shrink:0}
 /* Type badges */
 .type-badge{padding:2px 9px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
 .tb-taxable{background:rgba(74,158,255,.15);color:#4a9eff}
@@ -942,11 +946,13 @@ const SP500_BASE_YEAR=2026; // 2026 → maps to 2005, 2027 → 2006, etc.
    STATE
    ================================================================ */
 let state={
+  userName:'',spouseName:'',
   dob:'1980-03-15',spouseDob:'',
   lifeExpectancy:90,retireAge:65,
   lifestyleBase:75000,withdrawalRate:3.5,realSpendingGrowth:0,
   accumRate:9.5,retireRate:9.0,inflationRate:3.0,
   startingSalary:95000,raiseRate:3.0,deferralPct:10.0,matchPct:4.0,matchCap:4.0,use401kMax:false,salaryOverrides:{},deferralOverrides:{},
+  spouseSalary:0,spouseDeferralPct:10.0,spouseMatchPct:4.0,spouseMatchCap:4.0,
   ssMonthly:1800,ssClaimAge:67,ssInflation:2.5,
   spouseSSMonthly:900,spouseSSClaim:67,
   moneyMode:'future',
@@ -1307,6 +1313,8 @@ function isAccountContributingInYear(acc,calYear){
 function migrateAccount(acc){
   // Ensure the holdings array exists on every account (older saves predate holdings).
   if(!Array.isArray(acc.holdings))acc.holdings=[];
+  // Ensure every account has an owner field (older saves predate this feature).
+  if(!acc.owner)acc.owner='primary';
   if(!acc.contributions){
     const today=todayISO();
     const retDate=retireDateISO();
@@ -1352,15 +1360,15 @@ function migrateAccount(acc){
 
 function getDefaultAccounts(){
   const today=todayISO(),retDate=retireDateISO();
-  const mk=(id,name,type,bal,amt,freq,ci)=>({
-    id,name,type,startBal:bal,color:PALETTE[ci],
+  const mk=(id,name,type,bal,amt,freq,ci,owner)=>({
+    id,name,type,startBal:bal,color:PALETTE[ci],owner:owner||'primary',
     holdings:[],
     contributions:[{id:'c_'+id,amount:amt,frequency:freq,startDate:today,stopDate:retDate,stopAtRetirement:true,label:''}],
   });
   return[
-    mk('a1','401(k)','401k',50000,0,'annually',6),
-    mk('a2','Roth IRA','roth',15000,583,'monthly',3),
-    mk('a3','Taxable Brokerage','taxable',25000,500,'monthly',0),
+    mk('a1','401(k)','401k',50000,0,'annually',6,'primary'),
+    mk('a2','Roth IRA','roth',15000,583,'monthly',3,'primary'),
+    mk('a3','Taxable Brokerage','taxable',25000,500,'monthly',0,'primary'),
   ];
 }
 
@@ -1410,9 +1418,11 @@ function resetToDefaults(){
   if(!confirm('Reset all settings to defaults? This cannot be undone.'))return;
   localStorage.removeItem(STORAGE_KEY);
   state={
+    userName:'',spouseName:'',
     dob:'1980-03-15',spouseDob:'',lifeExpectancy:90,retireAge:65,
     lifestyleBase:75000,withdrawalRate:3.5,realSpendingGrowth:0,accumRate:9.5,retireRate:9.0,inflationRate:3.0,
     startingSalary:95000,raiseRate:3.0,deferralPct:10.0,matchPct:4.0,matchCap:4.0,use401kMax:false,salaryOverrides:{},deferralOverrides:{},
+    spouseSalary:0,spouseDeferralPct:10.0,spouseMatchPct:4.0,spouseMatchCap:4.0,
     ssMonthly:1800,ssClaimAge:67,ssInflation:2.5,spouseSSMonthly:900,spouseSSClaim:67,
     moneyMode:'future',
     residenceState:'CA',
@@ -5610,6 +5620,15 @@ function renderBreakdownPanel(){
   const pretaxPl=accounts.filter(a=>['pretax','401k','traditional-ira'].includes(a.type));
   const rothPl=accounts.filter(a=>a.type==='roth');
   const pool=(accs)=>accs.reduce((s,a)=>s+(viewRow.bals[a.id]||0),0);
+  // Per-owner breakdown
+  const primaryAccs=accounts.filter(a=>(a.owner||'primary')==='primary');
+  const spouseAccs=accounts.filter(a=>a.owner==='spouse');
+  const primaryTotal=primaryAccs.reduce((s,a)=>s+(viewRow.bals[a.id]||0),0);
+  const spouseTotal=spouseAccs.reduce((s,a)=>s+(viewRow.bals[a.id]||0),0);
+  const ownerSummaryHtml=spouseAccs.length?`
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:5px;margin-top:10px">By Owner</div>
+    <div class="pool-row"><span style="color:var(--accent)">● ${ownerLabel('primary')}:</span><strong>${D(primaryTotal)}</strong></div>
+    <div class="pool-row"><span style="color:var(--orange)">● ${ownerLabel('spouse')}:</span><strong>${D(spouseTotal)}</strong></div>`:'';
   return`<div class="breakdown-panel" style="height:100%">
     <div class="breakdown-header">
       <div style="font-size:12px;font-weight:600;color:var(--text)">${label}</div>
@@ -5622,6 +5641,7 @@ function renderBreakdownPanel(){
       ${hsaPl.length?`<div class="pool-row"><span>Pool 1b — HSA:</span><strong>${D(pool(hsaPl))}</strong></div>`:''}
       <div class="pool-row"><span>Pool 2 — Pre-Tax (401k + Trad IRA):</span><strong>${D(pool(pretaxPl))}</strong></div>
       <div class="pool-row"><span>Pool 3 — Roth IRA (legacy):</span><strong style="color:var(--success)">${D(pool(rothPl))}</strong></div>
+      ${ownerSummaryHtml}
     </div>
   </div>`;
 }
@@ -6535,6 +6555,27 @@ function _mctSummaryHtml(res){
         .map(([l,v,c])=>`<div style="background:var(--surface3);border-radius:8px;padding:9px 10px;text-align:center"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-muted)">${l}</div><div style="font-size:15px;font-weight:700;color:${c};margin-top:2px">${D(v)}</div></div>`).join('')}
     </div>
   </div>`;
+  // Per-owner at-retirement summary from base model
+  const spouseAccsMC=accounts.filter(a=>a.owner==='spouse');
+  const primaryAccsMC=accounts.filter(a=>(a.owner||'primary')==='primary');
+  let ownerMCRow='';
+  if(spouseAccsMC.length&&_model){
+    const retRow=_model.rows.find(r=>r.age===state.retireAge)||_model.rows.filter(r=>r.phase!=='Retirement').slice(-1)[0];
+    if(retRow){
+      const yRet=Math.max(0,state.retireAge-_model.curAge);
+      const Dret=v=>displayMoney(v,yRet);
+      const primBal=primaryAccsMC.reduce((s,a)=>s+(retRow.bals[a.id]||0),0);
+      const spsBal=spouseAccsMC.reduce((s,a)=>s+(retRow.bals[a.id]||0),0);
+      ownerMCRow=`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:6px">Portfolio by Owner at Retirement</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div><span style="font-size:11px;color:var(--accent);font-weight:600">● ${ownerLabel('primary')}</span> <span style="font-size:15px;font-weight:700;color:var(--text)">${Dret(primBal)}</span></div>
+          <div><span style="font-size:11px;color:var(--orange);font-weight:600">● ${ownerLabel('spouse')}</span> <span style="font-size:15px;font-weight:700;color:var(--text)">${Dret(spsBal)}</span></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-faint);margin-top:4px">Deterministic baseline — assign accounts in Configure → Your Accounts</div>
+      </div>`;
+    }
+  }
   return`<div class="config-card" style="margin-bottom:16px;padding:18px 20px">
     <div style="display:grid;grid-template-columns:250px 1fr;gap:20px;align-items:center">
       <div style="text-align:center">
@@ -6545,6 +6586,7 @@ function _mctSummaryHtml(res){
       <div>${tiles}</div>
     </div>
     ${pctRow}
+    ${ownerMCRow}
   </div>`;
 }
 
@@ -6680,6 +6722,23 @@ function _healthChip(h){
     </div>
   </div>`;
 }
+function _recsOwnerContextHtml(){
+  if(!hasSpouseOwner()||!_model)return'';
+  const retRow=_model.rows.find(r=>r.age===state.retireAge)||_model.rows.filter(r=>r.phase!=='Retirement').slice(-1)[0];
+  if(!retRow)return'';
+  const yRet=Math.max(0,state.retireAge-_model.curAge);
+  const D=v=>displayMoney(v,yRet);
+  const primAccs=accounts.filter(a=>(a.owner||'primary')==='primary');
+  const spsAccs=accounts.filter(a=>a.owner==='spouse');
+  const primBal=primAccs.reduce((s,a)=>s+(retRow.bals[a.id]||0),0);
+  const spsBal=spsAccs.reduce((s,a)=>s+(retRow.bals[a.id]||0),0);
+  const primNames=primAccs.map(a=>escHtml(a.name)).join(', ');
+  const spsNames=spsAccs.map(a=>escHtml(a.name)).join(', ');
+  return`<div style="display:flex;gap:12px;flex-wrap:wrap;padding:10px 14px;background:var(--surface3);border-radius:8px;margin-bottom:12px;font-size:12px">
+    <div><span style="color:var(--accent);font-weight:700">● ${ownerLabel('primary')}</span> ${D(primBal)} at retirement${primNames?` <span style="color:var(--text-faint)">(${primNames})</span>`:''}</div>
+    <div><span style="color:var(--orange);font-weight:700">● ${ownerLabel('spouse')}</span> ${D(spsBal)} at retirement${spsNames?` <span style="color:var(--text-faint)">(${spsNames})</span>`:''}</div>
+  </div>`;
+}
 function _recsCardBody(){
   const header=`<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--accent)">\u2728 AI Recommendations</div>
@@ -6689,9 +6748,9 @@ function _recsCardBody(){
   </div>`;
   if(_recsRunning)return header+`<div style="padding:22px 0;text-align:center;color:var(--text-muted);font-size:13px">Running the Roth, Social Security and withdrawal optimizers and isolated what-if projections\u2026</div>`;
   const payload=RIQ.Recommendations.get();
-  if(!payload)return header+`<div style="padding:18px 0;color:var(--text-muted);font-size:13px">Analyze your plan to get a prioritized, dollar-quantified action list — Roth conversions, Social Security timing, withdrawal strategy, contributions, spending and risk. Nothing runs until you click, and your inputs are never changed until you apply a suggestion.</div>`;
+  if(!payload)return header+_recsOwnerContextHtml()+`<div style="padding:18px 0;color:var(--text-muted);font-size:13px">Analyze your plan to get a prioritized, dollar-quantified action list — Roth conversions, Social Security timing, withdrawal strategy, contributions, spending and risk. Nothing runs until you click, and your inputs are never changed until you apply a suggestion.</div>`;
   const gen=new Date(payload.generatedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-  return header+_healthChip(payload.health)+renderRecommendationsList(payload,{print:false})+`<div style="font-size:11px;color:var(--text-faint);margin-top:6px">Ranked by estimated dollar impact · generated ${gen} · what-if runs restore your live plan exactly (deterministic estate unchanged).</div>`;
+  return header+_recsOwnerContextHtml()+_healthChip(payload.health)+renderRecommendationsList(payload,{print:false})+`<div style="font-size:11px;color:var(--text-faint);margin-top:6px">Ranked by estimated dollar impact · generated ${gen} · what-if runs restore your live plan exactly (deterministic estate unchanged).</div>`;
 }
 function renderRecommendationsCard(){
   return`<div class="config-card" id="ai-recs-card" style="margin-bottom:16px;padding:18px 20px">${_recsCardBody()}</div>`;
@@ -6754,10 +6813,14 @@ function _ssOptCardBody(){
     </div>
   </div>`;
 
+  const isMarriedSS=!!(state.spouseDob||(state.filingStatus==='mfj'||state.filingStatus==='mfs'));
+  const ssNames=isMarriedSS
+    ?`<span style="color:var(--accent);font-weight:600">${ownerLabel('primary')}</span> &amp; <span style="color:var(--orange);font-weight:600">${ownerLabel('spouse')}</span>`
+    :`<span style="color:var(--accent);font-weight:600">${ownerLabel('primary')}</span>`;
   if(!hasSS){
     return header+`<div style="padding:26px 0;text-align:center;color:var(--text-muted)">
-      <div style="font-size:14px;margin-bottom:6px">Enter your estimated monthly benefit at FRA to optimize your claim age.</div>
-      <div style="font-size:12px">Set <strong>Your Monthly Benefit at FRA</strong> in Configure → Social Security, then return here.</div>
+      <div style="font-size:14px;margin-bottom:6px">Enter the estimated monthly benefit for ${ssNames} to optimize the claim age.</div>
+      <div style="font-size:12px">Set <strong>Monthly Benefit at FRA</strong> in Configure → Social Security, then return here.</div>
     </div>`;
   }
 
@@ -6779,8 +6842,9 @@ function _ssOptCardBody(){
     :(RIQ.SocialSecurity._mcRan?'—':'run 🎲');
   const failColor=(rec.failure!=null&&cur.failure!=null)?(rec.failure<=cur.failure?'var(--success)':'var(--danger)'):'var(--text-muted)';
 
+  const agesLabel=married?`Recommended ages (${ownerLabel('primary')} / ${ownerLabel('spouse')})`:'Recommended claim age';
   const tiles=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:4px 0 8px">
-    ${_mcTile(married?'Recommended ages (you/spouse)':'Recommended claim age',recAgeTxt,'var(--accent)','current: '+curAgeTxt)}
+    ${_mcTile(agesLabel,recAgeTxt,'var(--accent)','current: '+curAgeTxt)}
     ${_mcTile('Recommended '+benLabel,fmtK(benMetric(rec)),'var(--text)','vs '+fmtK(benMetric(cur))+' now')}
     ${_mcTile('Break-even vs 62',beTxt,'var(--warning)','cumulative benefit crossover')}
     ${_mcTile('Δ ending estate',(estDelta>=0?'+':'')+displayMoney(estDelta,yEnd),estDelta>=0?'var(--success)':'var(--danger)','at age '+inp.uLifeAge)}
@@ -6800,7 +6864,7 @@ function _ssOptCardBody(){
   const charts=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:14px">
     <div>
       <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px">${useNominal?'Nominal':'Present-value'} lifetime benefit by your claim age</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${married?'spouse held at their current claim age · ':''}optimal age highlighted</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${married?`${ownerLabel('spouse')} held at current claim age · `:''}optimal age highlighted</div>
       <div id="ss-opt-bar" style="height:230px;position:relative"></div>
     </div>
     <div>
@@ -6824,16 +6888,17 @@ function _ssCoupleMatrixHTML(r){
   const cells={};r.couple.grid.forEach(c=>{cells[c.u+'/'+c.s]=c;});
   let vals=r.couple.grid.map(val);const mn=Math.min(...vals),mx=Math.max(...vals);
   const heat=(v)=>{const t=mx>mn?(v-mn)/(mx-mn):0;const a=(0.08+t*0.5).toFixed(2);return`background:rgba(0,191,179,${a})`;};
-  let head=`<th style="padding:4px 6px;font-size:10px;color:var(--text-muted);text-align:right">you ↓ / spouse →</th>`+ages.map(s=>`<th style="padding:4px 6px;font-size:11px;color:var(--text-muted)">${s}</th>`).join('');
+  const uName=ownerLabel('primary'),sName=ownerLabel('spouse');
+  let head=`<th style="padding:4px 6px;font-size:10px;color:var(--text-muted);text-align:right"><span style="color:var(--accent)">${escHtml(uName)}</span> ↓ / <span style="color:var(--orange)">${escHtml(sName)}</span> →</th>`+ages.map(s=>`<th style="padding:4px 6px;font-size:11px;color:var(--text-muted)">${s}</th>`).join('');
   let body=ages.map(u=>{
     let row=`<td style="padding:4px 6px;font-size:11px;color:var(--text-muted);text-align:right">${u}</td>`;
     row+=ages.map(s=>{const c=cells[u+'/'+s];if(!c)return'<td></td>';const isBest=best&&c.u===best.u&&c.s===best.s;
-      return`<td title="You ${u} · Spouse ${s}: ${fmtK(val(c))}" style="padding:4px 6px;text-align:center;font-size:10.5px;${heat(val(c))};${isBest?'outline:2px solid var(--accent);font-weight:800;color:var(--accent)':'color:var(--text)'};border-radius:4px">${isBest?'★':''}${fmtKM(val(c))}</td>`;}).join('');
+      return`<td title="${escHtml(uName)} ${u} · ${escHtml(sName)} ${s}: ${fmtK(val(c))}" style="padding:4px 6px;text-align:center;font-size:10.5px;${heat(val(c))};${isBest?'outline:2px solid var(--accent);font-weight:800;color:var(--accent)':'color:var(--text)'};border-radius:4px">${isBest?'★':''}${fmtKM(val(c))}</td>`;}).join('');
     return`<tr>${row}</tr>`;
   }).join('');
   return`<div style="margin-top:16px">
     <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px">Couple joint optimization — ${useNominal?'nominal':'present-value'} lifetime household benefit</div>
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">★ = best combination (you claim <strong style="color:var(--accent)">${best.u}</strong>, spouse claims <strong style="color:var(--accent)">${best.s}</strong>) · includes spousal & survivor benefits</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">★ = best combination (<span style="color:var(--accent);font-weight:600">${ownerLabel('primary')}</span> claims <strong style="color:var(--accent)">${best.u}</strong>, <span style="color:var(--orange);font-weight:600">${ownerLabel('spouse')}</span> claims <strong style="color:var(--accent)">${best.s}</strong>) · includes spousal &amp; survivor benefits</div>
     <div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:3px;min-width:520px"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
   </div>`;
 }
@@ -7504,20 +7569,34 @@ function renderConfigure(){
   const sectionMap={
 
   'sec-about':`<div class="config-card" draggable="true" data-section-id="sec-about">
-    <div class="config-card-header">${DH}<div class="config-card-icon">👤</div><div class="config-card-title">About You</div></div>
+    <div class="config-card-header">${DH}<div class="config-card-icon">👤</div><div class="config-card-title">About You${state.userName?` — <span style="color:var(--accent)">${escHtml(state.userName)}</span>`:''}</div></div>
     <div class="config-card-body">
-      <div class="field-group">
-        <label class="field-label">Date of Birth</label>
-        <div style="display:flex;align-items:center;gap:10px">
-          ${fi('dob',state.dob||'',160,'date')}
-          ${state.dob?`<span style="font-size:14px;color:var(--accent);font-weight:600">Age ${curAge}</span>`:''}
+      <div class="row2">
+        <div class="field-group">
+          <label class="field-label">Your Name</label>
+          <input type="text" class="field-input" data-key="userName" value="${escHtml(state.userName||'')}" placeholder="e.g. Alex" maxlength="40" style="max-width:200px">
+          <div class="field-helper">Used to personalize the app</div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Spouse / Partner Name <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
+          <input type="text" class="field-input" data-key="spouseName" value="${escHtml(state.spouseName||'')}" placeholder="e.g. Jordan" maxlength="40" style="max-width:200px">
+          <div class="field-helper">Leave blank if single</div>
         </div>
       </div>
-      <div class="field-group">
-        <label class="field-label">Spouse / Partner DOB <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
-        <div style="display:flex;align-items:center;gap:10px">
-          ${fi('spouseDob',state.spouseDob||'',160,'date')}
-          ${state.spouseDob?`<span style="font-size:13px;color:var(--accent)">Age ${computeAge(state.spouseDob)}</span>`:'<span style="font-size:11px;color:var(--text-faint)">For spousal SS</span>'}
+      <div class="row2">
+        <div class="field-group">
+          <label class="field-label">Your Date of Birth</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            ${fi('dob',state.dob||'',160,'date')}
+            ${state.dob?`<span style="font-size:14px;color:var(--accent);font-weight:600">Age ${curAge}</span>`:''}
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">${state.spouseName?escHtml(state.spouseName)+"'s":'Spouse / Partner'} DOB <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
+          <div style="display:flex;align-items:center;gap:10px">
+            ${fi('spouseDob',state.spouseDob||'',160,'date')}
+            ${state.spouseDob?`<span style="font-size:13px;color:var(--accent)">Age ${computeAge(state.spouseDob)}</span>`:'<span style="font-size:11px;color:var(--text-faint)">For spousal SS</span>'}
+          </div>
         </div>
       </div>
       <div class="row2">
@@ -7630,6 +7709,40 @@ function renderConfigure(){
           ${pct('matchCap',state.matchCap,110)}
         </div>
       </div>
+      ${(state.spouseDob||(state.filingStatus==='mfj'||state.filingStatus==='mfs'))&&(state.spouseName||state.spouseDob)?`
+      <div class="divider" style="margin:18px 0 14px"></div>
+      <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:12px">
+        ${state.spouseName?escHtml(state.spouseName)+"'s":'Spouse'} Income &amp; 401(k)
+      </div>
+      <div class="row2">
+        <div class="field-group">
+          <label class="field-label">${state.spouseName?escHtml(state.spouseName)+"'s":'Spouse'} Salary</label>
+          ${dollar('spouseSalary',state.spouseSalary||0,170)}
+          <div class="field-helper">Set 0 if not working</div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Annual Raise</label>
+          ${pct('raiseRate',state.raiseRate,110)}
+          <div class="field-helper">Shared raise rate</div>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">${state.spouseName?escHtml(state.spouseName)+"'s":'Spouse'} 401(k) Deferral</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${pct('spouseDeferralPct',state.spouseDeferralPct||10,110)}
+        </div>
+        <div class="field-helper">Add spouse's 401(k) as an account in "Your Accounts" to include contributions in projections</div>
+      </div>
+      <div class="row2">
+        <div class="field-group">
+          <label class="field-label">Spouse Company Match</label>
+          ${pct('spouseMatchPct',state.spouseMatchPct||4,110)}
+        </div>
+        <div class="field-group">
+          <label class="field-label">Spouse Match Cap</label>
+          ${pct('spouseMatchCap',state.spouseMatchCap||4,110)}
+        </div>
+      </div>`:''}
     </div>
   </div>
 
@@ -7731,9 +7844,10 @@ function renderConfigure(){
     <div class="config-card-header">${DH}<div class="config-card-icon">🏛</div><div class="config-card-title">Social Security</div></div>
     <div class="config-card-body">
       <div style="margin-bottom:14px"><a href="https://www.ssa.gov/myaccount/" target="_blank" class="btn btn-secondary btn-sm">Open SSA.gov →</a></div>
+      ${state.userName?`<div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:12px">${escHtml(state.userName)}'s Social Security</div>`:''}
       <div class="row2">
         <div class="field-group">
-          <label class="field-label">Your Monthly Benefit at FRA</label>
+          <label class="field-label">${state.userName?escHtml(state.userName)+"'s":'Your'} Monthly Benefit at FRA</label>
           ${dollar('ssMonthly',state.ssMonthly,150)}
         </div>
         <div class="field-group">
@@ -7743,15 +7857,19 @@ function renderConfigure(){
         </div>
       </div>
       <div id="ss-preview-box" class="ss-preview"></div>
-      ${state.spouseDob?`
+      ${(state.spouseDob||state.spouseName||(state.filingStatus==='mfj'||state.filingStatus==='mfs'))?`
       <div class="divider"></div>
+      <div style="font-size:.82rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:12px">
+        ${state.spouseName?escHtml(state.spouseName)+"'s":'Spouse / Partner'} Social Security
+      </div>
+      ${!state.spouseDob?`<div class="field-helper" style="color:var(--warning);margin-bottom:10px">ℹ️ Add ${state.spouseName?escHtml(state.spouseName)+"'s":'spouse'} Date of Birth in "About You" for accurate spousal SS timing.</div>`:''}
       <div class="row2">
         <div class="field-group">
-          <label class="field-label">Spouse Benefit at FRA</label>
+          <label class="field-label">${state.spouseName?escHtml(state.spouseName)+"'s":'Spouse'} Benefit at FRA</label>
           ${dollar('spouseSSMonthly',state.spouseSSMonthly,150)}
         </div>
         <div class="field-group">
-          <label class="field-label">Spouse Claims at Age</label>
+          <label class="field-label">${state.spouseName?escHtml(state.spouseName)+'  Claims':'Spouse Claims'} at Age</label>
           ${fs('spouseSSClaim',[62,63,64,65,66,67,68,69,70].map(a=>`<option value="${a}"${+state.spouseSSClaim===a?' selected':''}>${a}</option>`).join(''),100)}
         </div>
       </div>`:''}
@@ -7934,6 +8052,11 @@ function renderConfigure(){
 /* ================================================================
    RENDER: ACCOUNT CARDS
    ================================================================ */
+// Owner label helpers used by account cards + projection/overview/mc breakdowns
+function ownerLabel(owner){return owner==='spouse'?(state.spouseName||'Spouse'):(state.userName||'You');}
+function ownerColor(owner){return owner==='spouse'?'var(--orange)':'var(--accent)';}
+function hasSpouseOwner(){return accounts.some(a=>a.owner==='spouse');}
+
 function renderAccCards(){
   return accounts.map((acc,idx)=>{
     const is401k=acc.type==='401k';
@@ -7992,6 +8115,8 @@ function renderAccCards(){
       </div>`;
     }).join('');
 
+    const accOwner=acc.owner||'primary';
+    const hasSpouse=!!(state.spouseName||state.spouseDob||(state.filingStatus==='mfj'||state.filingStatus==='mfs'));
     return`<div class="account-card" draggable="true" data-acc-card="${acc.id}">
       <div class="account-card-header">
         <span class="acc-drag-handle" title="Drag to reorder">⠿</span>
@@ -8000,6 +8125,10 @@ function renderAccCards(){
         <div class="acc-type-pills">
           ${ACC_TYPES.map(t=>`<button class="acc-type-pill${acc.type===t.v?' active':''}" data-acc-id="${acc.id}" data-acc-type="${t.v}">${t.l}</button>`).join('')}
         </div>
+        ${hasSpouse?`<div class="acc-owner-pills" title="Assign this account to a person">
+          <button class="acc-owner-pill${accOwner==='primary'?' active':''}" style="${accOwner==='primary'?'background:var(--accent);color:#fff':''}" onclick="setAccOwner('${acc.id}','primary')" title="Assign to ${ownerLabel('primary')}">${ownerLabel('primary')}</button>
+          <button class="acc-owner-pill${accOwner==='spouse'?' active':''}" style="${accOwner==='spouse'?'background:var(--orange);color:#fff':''}" onclick="setAccOwner('${acc.id}','spouse')" title="Assign to ${ownerLabel('spouse')}">${ownerLabel('spouse')}</button>
+        </div>`:`<span class="acc-owner-tag" style="font-size:10px;color:var(--accent);font-weight:600;margin-right:4px">${ownerLabel('primary')}</span>`}
         <button class="btn-danger btn-xs" data-del-acc="${acc.id}">Remove</button>
       </div>
       <div class="account-card-body">
@@ -8771,7 +8900,7 @@ function renderProjections(){
     <th style="min-width:70px;color:var(--accent)" title="401(k) deferral % this year. Click to override for a specific year.">Contrib %</th>
     ${hasGlide?'<th style="min-width:70px;color:var(--text-muted)" title="Asset allocation: Equity% / Bond% / Cash%">Alloc</th>':''}
     ${showAllCols
-      ? accounts.map(a=>`<th style="min-width:110px"><span class="th-acc-dot" style="background:${a.color}"></span>${a.name.length>14?a.name.substring(0,13)+'…':escHtml(a.name)}</th>`).join('')
+      ? accounts.map(a=>{const ow=a.owner||'primary';const owTag=hasSpouseOwner()?`<span style="font-size:9px;font-weight:700;margin-left:3px;color:${ownerColor(ow)}">(${ownerLabel(ow)})</span>`:'';return`<th style="min-width:110px"><span class="th-acc-dot" style="background:${a.color}"></span>${a.name.length>14?a.name.substring(0,13)+'…':escHtml(a.name)}${owTag}</th>`;}).join('')
       : `${hasTaxable?'<th class="th-taxable" style="min-width:100px">Taxable</th>':''}
          ${hasTaxable?'<th style="min-width:80px;color:rgba(74,158,255,.7);font-size:11px;font-weight:400" title="Contributions to taxable brokerage accounts this year">↓ Taxable</th>':''}
          ${has401k?'<th class="th-pretax" style="min-width:100px;color:#f59e0b" title="Workplace 401(k) accounts balance (year-end)">401(k)</th>':''}
@@ -10958,8 +11087,15 @@ function resetOverrides(){overrides={};recalcNow();if(activeTab==='configure'&&a
 function resetIrsOv(){irsOv={};recalcNow();if(activeTab==='configure'&&advOpen){const b=document.querySelector('.adv-body');if(b)b.innerHTML=renderAdvanced();}}
 function addAccount(){
   const id=nextAccId();
-  accounts.push({id,name:'New Account',type:'taxable',startBal:0,color:nextColor(),holdings:[],contributions:[{id:'c_'+Date.now(),amount:0,frequency:'monthly',startDate:todayISO(),stopDate:retireDateISO(),stopAtRetirement:true,label:''}]});
+  accounts.push({id,name:'New Account',type:'taxable',startBal:0,color:nextColor(),owner:'primary',holdings:[],contributions:[{id:'c_'+Date.now(),amount:0,frequency:'monthly',startDate:todayISO(),stopDate:retireDateISO(),stopAtRetirement:true,label:''}]});
   recalcNow(); // structural change: immediately rebuild model + mark all other tabs dirty
+}
+function setAccOwner(accId,owner){
+  const acc=accounts.find(a=>a.id===accId);
+  if(!acc)return;
+  acc.owner=owner;
+  saveState();
+  renderConfigure();
 }
 function saveQuickEntry(){
   const yr=cy();if(!actualData[yr])actualData[yr]={};
