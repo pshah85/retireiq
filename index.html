@@ -942,13 +942,13 @@ const SP500_BASE_YEAR=2026; // 2026 → maps to 2005, 2027 → 2006, etc.
    STATE
    ================================================================ */
 let state={
-  dob:'1985-07-14',spouseDob:'',
-  lifeExpectancy:90,retireAge:55,
-  lifestyleBase:120000,withdrawalRate:3.5,realSpendingGrowth:0,
+  dob:'1980-03-15',spouseDob:'',
+  lifeExpectancy:90,retireAge:65,
+  lifestyleBase:75000,withdrawalRate:3.5,realSpendingGrowth:0,
   accumRate:9.5,retireRate:9.0,inflationRate:3.0,
-  startingSalary:140000,raiseRate:3.0,deferralPct:17.14,matchPct:4.0,matchCap:4.0,use401kMax:false,salaryOverrides:{},deferralOverrides:{},
-  ssMonthly:2800,ssClaimAge:67,ssInflation:2.5,
-  spouseSSMonthly:1400,spouseSSClaim:67,
+  startingSalary:95000,raiseRate:3.0,deferralPct:10.0,matchPct:4.0,matchCap:4.0,use401kMax:false,salaryOverrides:{},deferralOverrides:{},
+  ssMonthly:1800,ssClaimAge:67,ssInflation:2.5,
+  spouseSSMonthly:900,spouseSSClaim:67,
   moneyMode:'future',
   residenceState:'CA',
   crashMasterEnabled:false,
@@ -1354,17 +1354,13 @@ function getDefaultAccounts(){
   const today=todayISO(),retDate=retireDateISO();
   const mk=(id,name,type,bal,amt,freq,ci)=>({
     id,name,type,startBal:bal,color:PALETTE[ci],
-    holdings:[], // no holdings by default → Portfolio scenario stays inert; default estate unchanged
+    holdings:[],
     contributions:[{id:'c_'+id,amount:amt,frequency:freq,startDate:today,stopDate:retDate,stopAtRetirement:true,label:''}],
   });
   return[
-    mk('a1','Investment Account 1','taxable',22344,28,'daily-calendar',0),
-    mk('a2','Investment Account 2','taxable',32796,28,'daily-calendar',1),
-    mk('a3','Investment Account 3','taxable',43284,28,'daily-calendar',2),
-    mk('a4','My Roth IRA','roth',0,7000,'annually',3),
-    mk('a5',"Spouse's Roth IRA",'roth',0,7000,'annually',4),
-    mk('a6','Traditional IRA','pretax',33764,0,'annually',5),
-    mk('a7','Workplace 401(k)','401k',120000,0,'annually',6),
+    mk('a1','401(k)','401k',50000,0,'annually',6),
+    mk('a2','Roth IRA','roth',15000,583,'monthly',3),
+    mk('a3','Taxable Brokerage','taxable',25000,500,'monthly',0),
   ];
 }
 
@@ -1414,10 +1410,10 @@ function resetToDefaults(){
   if(!confirm('Reset all settings to defaults? This cannot be undone.'))return;
   localStorage.removeItem(STORAGE_KEY);
   state={
-    dob:'1985-07-14',spouseDob:'',lifeExpectancy:90,retireAge:55,
-    lifestyleBase:120000,withdrawalRate:3.5,realSpendingGrowth:0,accumRate:9.5,retireRate:9.0,inflationRate:3.0,
-    startingSalary:140000,raiseRate:3.0,deferralPct:17.14,matchPct:4.0,matchCap:4.0,use401kMax:false,salaryOverrides:{},deferralOverrides:{},
-    ssMonthly:2800,ssClaimAge:67,ssInflation:2.5,spouseSSMonthly:1400,spouseSSClaim:67,
+    dob:'1980-03-15',spouseDob:'',lifeExpectancy:90,retireAge:65,
+    lifestyleBase:75000,withdrawalRate:3.5,realSpendingGrowth:0,accumRate:9.5,retireRate:9.0,inflationRate:3.0,
+    startingSalary:95000,raiseRate:3.0,deferralPct:10.0,matchPct:4.0,matchCap:4.0,use401kMax:false,salaryOverrides:{},deferralOverrides:{},
+    ssMonthly:1800,ssClaimAge:67,ssInflation:2.5,spouseSSMonthly:900,spouseSSClaim:67,
     moneyMode:'future',
     residenceState:'CA',
     crashMasterEnabled:false,
