@@ -2772,6 +2772,41 @@ RIQ.Tickers=(function(){
     WMT  :{name:'Walmart Inc.',               assetClass:'US Consumer Staples (single stock)',expReturn:10.0,vol:20.0,er:0},
     PG   :{name:'Procter & Gamble Co.',       assetClass:'US Consumer Staples (single stock)',expReturn:8.0, vol:17.0,er:0},
     HD   :{name:'Home Depot Inc.',            assetClass:'US Consumer Disc. (single stock)', expReturn:11.0,vol:23.0,er:0},
+    // ── Semiconductors & Tech (beyond mega-cap) ──
+    TSM  :{name:'Taiwan Semiconductor (ADR)', assetClass:'Semiconductor (single stock)',      expReturn:13.0,vol:32.0,er:0},
+    MRVL :{name:'Marvell Technology Inc.',    assetClass:'Semiconductor (single stock)',      expReturn:15.0,vol:38.0,er:0},
+    AMD  :{name:'Advanced Micro Devices',     assetClass:'Semiconductor (single stock)',      expReturn:16.0,vol:42.0,er:0},
+    INTC :{name:'Intel Corp.',                assetClass:'Semiconductor (single stock)',      expReturn:6.0, vol:28.0,er:0},
+    QCOM :{name:'Qualcomm Inc.',              assetClass:'Semiconductor (single stock)',      expReturn:11.0,vol:30.0,er:0},
+    AVGO :{name:'Broadcom Inc.',              assetClass:'Semiconductor (single stock)',      expReturn:14.0,vol:30.0,er:0},
+    MU   :{name:'Micron Technology Inc.',     assetClass:'Semiconductor (single stock)',      expReturn:12.0,vol:40.0,er:0},
+    AMAT :{name:'Applied Materials Inc.',     assetClass:'Semiconductor (single stock)',      expReturn:13.0,vol:34.0,er:0},
+    LRCX :{name:'Lam Research Corp.',         assetClass:'Semiconductor (single stock)',      expReturn:13.0,vol:34.0,er:0},
+    KLAC :{name:'KLA Corp.',                  assetClass:'Semiconductor (single stock)',      expReturn:13.0,vol:30.0,er:0},
+    // ── Large-cap Tech (not mega-cap) ──
+    CRM  :{name:'Salesforce Inc.',            assetClass:'US Large Growth (single stock)',   expReturn:12.0,vol:30.0,er:0},
+    ADBE :{name:'Adobe Inc.',                 assetClass:'US Large Growth (single stock)',   expReturn:11.0,vol:28.0,er:0},
+    ORCL :{name:'Oracle Corp.',               assetClass:'US Large Growth (single stock)',   expReturn:11.0,vol:26.0,er:0},
+    NOW  :{name:'ServiceNow Inc.',            assetClass:'US Large Growth (single stock)',   expReturn:14.0,vol:30.0,er:0},
+    SNOW :{name:'Snowflake Inc.',             assetClass:'US Large Growth (single stock)',   expReturn:12.0,vol:45.0,er:0},
+    SHOP :{name:'Shopify Inc.',               assetClass:'US Large Growth (single stock)',   expReturn:13.0,vol:45.0,er:0},
+    NFLX :{name:'Netflix Inc.',               assetClass:'US Large Growth (single stock)',   expReturn:14.0,vol:38.0,er:0},
+    UBER :{name:'Uber Technologies Inc.',     assetClass:'US Large Growth (single stock)',   expReturn:13.0,vol:38.0,er:0},
+    // ── Financials / Healthcare / Consumer ──
+    GS   :{name:'Goldman Sachs Group',        assetClass:'US Financials (single stock)',     expReturn:10.0,vol:25.0,er:0},
+    MS   :{name:'Morgan Stanley',             assetClass:'US Financials (single stock)',     expReturn:10.0,vol:26.0,er:0},
+    BAC  :{name:'Bank of America Corp.',      assetClass:'US Financials (single stock)',     expReturn:9.0, vol:25.0,er:0},
+    WFC  :{name:'Wells Fargo & Co.',          assetClass:'US Financials (single stock)',     expReturn:9.0, vol:26.0,er:0},
+    LLY  :{name:'Eli Lilly and Co.',          assetClass:'US Health Care (single stock)',    expReturn:14.0,vol:28.0,er:0},
+    ABBV :{name:'AbbVie Inc.',                assetClass:'US Health Care (single stock)',    expReturn:10.0,vol:22.0,er:0},
+    PFE  :{name:'Pfizer Inc.',                assetClass:'US Health Care (single stock)',    expReturn:7.0, vol:22.0,er:0},
+    MRK  :{name:'Merck & Co.',                assetClass:'US Health Care (single stock)',    expReturn:9.0, vol:20.0,er:0},
+    COST :{name:'Costco Wholesale Corp.',     assetClass:'US Consumer Staples (single stock)',expReturn:12.0,vol:20.0,er:0},
+    AMGN :{name:'Amgen Inc.',                 assetClass:'US Health Care (single stock)',    expReturn:9.0, vol:22.0,er:0},
+    // ── International / ADRs ──
+    BABA :{name:'Alibaba Group (ADR)',         assetClass:'Intl Emerging (single stock)',     expReturn:8.0, vol:40.0,er:0},
+    NVO  :{name:'Novo Nordisk (ADR)',          assetClass:'Intl Developed (single stock)',    expReturn:12.0,vol:25.0,er:0},
+    ASML :{name:'ASML Holding (ADR)',          assetClass:'Intl Developed (single stock)',    expReturn:13.0,vol:30.0,er:0},
   };
   const CACHE_KEY='retireiq_tickers_v1';
   function norm(t){return String(t||'').trim().toUpperCase();}
@@ -8231,13 +8266,19 @@ function renderHoldingRow(acc,h){
 // Status text for the global Refresh control (built-in vs updated <date>).
 function holdingsRefreshStatusHtml(){
   const st=(window.RIQ&&RIQ.Tickers)?RIQ.Tickers.status():{fresh:false};
+  // Count distinct tickers across all accounts for context
+  const allTickers=[...new Set((accounts||[]).flatMap(a=>(a.holdings||[]).map(h=>h&&h.ticker).filter(Boolean)))];
+  const holdingCount=allTickers.length;
   if(st&&st.fresh&&st.savedAt){
     const d=String(st.savedAt).slice(0,10);
-    return `Prices updated ${d} · ${st.count} ticker${st.count===1?'':'s'} (${escHtml(st.source||'live')})`;
+    const cachedCount=st.count;
+    const uncached=allTickers.filter(t=>{const c=RIQ.Tickers&&RIQ.Tickers.cacheFor(t);return!c;});
+    const uncachedNote=uncached.length>0?` · <span style="color:var(--warning)">${uncached.length} not yet fetched — click Refresh</span>`:'';
+    return `Prices updated ${d} · ${cachedCount} cached · ${holdingCount} holding${holdingCount===1?'':'s'} (${escHtml(st.source||'live')})${uncachedNote}`;
   }
   const live=!!(window.RIQ&&RIQ.Tickers&&RIQ.Tickers.liveSourceAvailable());
   return live
-    ? 'Using built-in long-run estimates. Refresh fetches live quotes via the Finnhub proxy (falls back to Stooq / estimates).'
+    ? `Using built-in long-run estimates for ${holdingCount} holding${holdingCount===1?'':'s'}. Refresh fetches live quotes via the Finnhub proxy.`
     : 'Using built-in long-run estimates (no live source). Set a Live data source below to enable live quotes from file://.';
 }
 
@@ -8361,10 +8402,16 @@ function autoRefreshHoldingsOnLoad(){
   try{
     if(!(window.RIQ&&RIQ.Tickers))return;
     if(!RIQ.Tickers.liveSourceAvailable())return;            // file:// w/o override → keep estimates silently
-    if(sessionStorage.getItem('retireiq_autorefresh_v1'))return; // session-once guard
+    // Collect all unique tickers across accounts
+    const allTickers=[...new Set((accounts||[]).flatMap(a=>(a.holdings||[]).map(h=>h&&h.ticker).filter(Boolean)))];
+    if(!allTickers.length)return;
+    // Always refresh uncached tickers; for cached ones, use session guard to avoid hammering the API
+    const uncached=allTickers.filter(t=>!RIQ.Tickers.cacheFor(t));
+    const alreadyRan=!!sessionStorage.getItem('retireiq_autorefresh_v1');
+    if(alreadyRan&&!uncached.length)return; // session already ran + nothing new → skip
     sessionStorage.setItem('retireiq_autorefresh_v1','1');
-    const tickers=[];
-    (accounts||[]).forEach(a=>{(a.holdings||[]).forEach(h=>{if(h&&h.ticker)tickers.push(h.ticker);});});
+    // Prioritize uncached tickers; include all if first run this session
+    const tickers=alreadyRan?uncached:allTickers;
     if(!tickers.length)return; // nothing held (e.g. default plan) → nothing to fetch → estate unchanged
     const status=document.getElementById('holdings-refresh-status');
     if(status&&activeTab==='configure')status.textContent='Auto-refreshing live prices for '+tickers.length+' ticker'+(tickers.length===1?'':'s')+'…';
