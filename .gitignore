@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Vercel
+.vercel/
+
+# Local env files — NEVER commit secrets (FINNHUB_API_KEY lives in Vercel env vars only)
+.env
+.env.*
+!.env.example
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
