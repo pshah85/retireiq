@@ -11221,7 +11221,7 @@ function exportWithData() {
   // ── Indicator bar ──
   const bar=document.createElement('div');
   bar.id='ptr-bar';
-  bar.innerHTML='<div id="ptr-arrow">↓</div>';
+  bar.innerHTML='<div id="ptr-inner"><span id="ptr-arrow">↓</span><span id="ptr-label"> Pull to refresh</span></div>';
   Object.assign(bar.style,{
     position:'fixed',top:'0',left:'0',right:'0',
     height:'0',overflow:'hidden',
@@ -11231,10 +11231,15 @@ function exportWithData() {
     transition:'background .2s',
   });
   const arrow=bar.querySelector('#ptr-arrow');
+  const label=bar.querySelector('#ptr-label');
   Object.assign(arrow.style,{
     color:'#fff',fontSize:'18px',fontWeight:'700',
     transition:'transform .15s',
-    userSelect:'none',
+    userSelect:'none',display:'inline-block',
+  });
+  Object.assign(label.style,{
+    color:'#fff',fontSize:'13px',fontWeight:'600',
+    userSelect:'none',letterSpacing:'.02em',
   });
   document.body.appendChild(bar);
 
@@ -11256,8 +11261,8 @@ function exportWithData() {
     const pull=Math.min(dy,MAX_PULL);
     bar.style.height=pull+'px';
     bar.style.background=pull>=THRESHOLD?'var(--success)':'var(--accent)';
-    arrow.style.transform=pull>=THRESHOLD?'rotate(180deg) scale(1.2)':'rotate(0deg) scale(1)';
-    arrow.textContent=pull>=THRESHOLD?'↑ Release to refresh':'↓ Pull to refresh';
+    arrow.style.transform=pull>=THRESHOLD?'rotate(180deg)':'rotate(0deg)';
+    label.textContent=pull>=THRESHOLD?' Release to refresh':' Pull to refresh';
   },{passive:true});
 
   document.addEventListener('touchend',function(e){
@@ -11267,7 +11272,8 @@ function exportWithData() {
     if(dy>=THRESHOLD){
       bar.style.height='44px';
       bar.style.background='var(--success)';
-      arrow.textContent='Refreshing…';
+      arrow.textContent='↻';arrow.style.transform='rotate(0deg)';
+      label.textContent=' Refreshing…';
       setTimeout(()=>location.reload(),300);
     } else {
       bar.style.transition='height .25s ease';
